@@ -12,22 +12,25 @@ export type NoteTitle = {
 };
 
 export default function Command() {
-  const { data, isLoading, permissionView, mutate } = useNotes();
+  const { data, isLoading, isLoadingPlaintext, permissionView, mutate } = useNotes();
   const [searchText, setSearchText] = useState<string>("");
 
   const filteredNotes = useMemo(() => {
     return [...(data?.pinnedNotes ?? []), ...(data?.unpinnedNotes ?? [])].filter((note) => {
-      const chineseMatch = (text: string | null) =>
+      const searchLower = searchText.toLowerCase();
+      const chineseMatch = (text: string | null | undefined) =>
         text && /[\u4e00-\u9fa5]/.test(text) ? match(text, searchText) !== null : false;
       return (
         chineseMatch(note.title) ||
         chineseMatch(note.snippet) ||
         chineseMatch(note.folder) ||
+        chineseMatch(note.plaintext) ||
         note.tags.some((tag) => chineseMatch(tag.text)) ||
-        note.title.toLowerCase().includes(searchText.toLowerCase()) ||
-        note.snippet?.toLowerCase().includes(searchText.toLowerCase()) ||
-        note.folder.toLowerCase().includes(searchText.toLowerCase()) ||
-        note.tags.some((tag) => tag.text?.toLowerCase().includes(searchText.toLowerCase()))
+        note.title.toLowerCase().includes(searchLower) ||
+        note.snippet?.toLowerCase().includes(searchLower) ||
+        note.folder.toLowerCase().includes(searchLower) ||
+        note.plaintext?.toLowerCase().includes(searchLower) ||
+        note.tags.some((tag) => tag.text?.toLowerCase().includes(searchLower))
       );
     });
   }, [searchText, data]);
@@ -42,8 +45,8 @@ export default function Command() {
   return (
     <List
       onSearchTextChange={setSearchText}
-      isLoading={isLoading}
-      searchBarPlaceholder="Search notes by title, folder, description, tags, or accessories"
+      isLoading={isLoading || isLoadingPlaintext}
+      searchBarPlaceholder="Search notes by title, folder, body content, or tags"
     >
       <List.Section title="Pinned">
         {limitedNotes

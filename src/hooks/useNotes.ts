@@ -1,9 +1,10 @@
 import { homedir } from "os";
 import { resolve } from "path";
 
-import { useSQL } from "@raycast/utils";
+import { useCachedPromise, useSQL } from "@raycast/utils";
 import { partition } from "lodash";
 
+import { getAllNotesPlainText } from "../api/applescript";
 import { getOpenNoteURL } from "../helpers";
 
 type Link = {
@@ -43,6 +44,8 @@ export type NoteItem = {
   pinned: boolean;
   checklist: boolean;
   checklistInProgress: boolean;
+  // Full plaintext body for searching (loaded in background)
+  plaintext?: string;
 };
 
 const NOTES_DB = resolve(homedir(), "Library/Group Containers/group.com.apple.notes/NoteStore.sqlite");
@@ -137,6 +140,24 @@ export const useNotes = () => {
     execute: data && data.length > 0,
   });
 
+  // Fetch plaintext bodies in background for full-text search
+  const { data: plaintextData, isLoading: isLoadingPlaintext } = useCachedPromise(
+    async () => {
+      const entries = await getAllNotesPlainText();
+      // Build a plain object for fast lookup (Map doesn't survive JSON serialization)
+      const lookup: Record<string, string> = {};
+      for (const entry of entries) {
+        lookup[entry.id] = entry.plaintext;
+      }
+      return lookup;
+    },
+    [],
+    {
+      execute: data && data.length > 0,
+      keepPreviousData: true,
+    },
+  );
+
   const alreadyFound: { [key: string]: boolean } = {};
   const notes =
     data
@@ -166,6 +187,7 @@ export const useNotes = () => {
     });
 
     const noteTags = tags?.filter((tag) => tag.notePk == note.pk);
+    const plaintext = plaintextData?.[note.id];
 
     return {
       ...note,
@@ -173,6 +195,7 @@ export const useNotes = () => {
       links: noteLinks ?? [],
       backlinks: noteBacklinks ?? [],
       tags: noteTags ?? [],
+      plaintext,
     };
   });
 
@@ -181,6 +204,7 @@ export const useNotes = () => {
 
   return {
     data: { pinnedNotes, unpinnedNotes, deletedNotes, allNotes: [...pinnedNotes, ...unpinnedNotes, ...deletedNotes] },
+    isLoadingPlaintext,
     ...rest,
   };
 };

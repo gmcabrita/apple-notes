@@ -88,3 +88,58 @@ export async function getSelectedNote() {
     end tell
   `);
 }
+
+export type NotePlainTextEntry = {
+  id: string;
+  plaintext: string;
+};
+
+/**
+ * Fetch plaintext content for all notes in batch.
+ * Returns array of {id, plaintext} objects as JSON.
+ */
+export async function getAllNotesPlainText(): Promise<NotePlainTextEntry[]> {
+  const result = await runAppleScript(`
+    set output to "["
+    set isFirst to true
+    tell application "Notes"
+      repeat with acc in accounts
+        repeat with theNote in notes of acc
+          try
+            set noteId to id of theNote
+            set noteText to plaintext of theNote
+            -- Escape backslashes first, then quotes, then newlines/tabs
+            set noteText to my replaceText(noteText, "\\\\", "\\\\\\\\")
+            set noteText to my replaceText(noteText, "\\"", "\\\\\\"")
+            set noteText to my replaceText(noteText, return, "\\\\n")
+            set noteText to my replaceText(noteText, linefeed, "\\\\n")
+            set noteText to my replaceText(noteText, tab, "\\\\t")
+            if not isFirst then
+              set output to output & ","
+            end if
+            set isFirst to false
+            set output to output & "{\\"id\\":\\"" & noteId & "\\",\\"plaintext\\":\\"" & noteText & "\\"}"
+          end try
+        end repeat
+      end repeat
+    end tell
+    set output to output & "]"
+    return output
+
+    on replaceText(theText, searchStr, replaceStr)
+      set AppleScript's text item delimiters to searchStr
+      set theItems to text items of theText
+      set AppleScript's text item delimiters to replaceStr
+      set theText to theItems as text
+      set AppleScript's text item delimiters to ""
+      return theText
+    end replaceText
+  `);
+
+  try {
+    return JSON.parse(result) as NotePlainTextEntry[];
+  } catch {
+    console.error("Failed to parse notes plaintext:", result);
+    return [];
+  }
+}
